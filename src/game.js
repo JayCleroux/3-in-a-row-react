@@ -1,143 +1,165 @@
-import React from 'react';
-import Board from './board';
+import React, { useState, useEffect } from 'react';
+import Grid from './grid'; 
 
-function MoveCounter(props) {
+const gridSizes = {
+  '6x6': 'https://prog2700.onrender.com/threeinarow/6x6',
+  '8x8': 'https://prog2700.onrender.com/threeinarow/8x8',
+  '10x10': 'https://prog2700.onrender.com/threeinarow/10x10',
+  '12x12': 'https://prog2700.onrender.com/threeinarow/12x12',
+  '14x14': 'https://prog2700.onrender.com/threeinarow/14x14',
+  'Random': 'https://prog2700.onrender.com/threeinarow/random',
+};
+
+const colors = ['gold', '#B366FF', 'white'];
+
+const Game = () => {
+  const [api] = useState('https://prog2700.onrender.com/threeinarow/sample');
+  const [gridData, setGridData] = useState({
+    rows: [], 
+  });
+  const [showIncorrectSquares, setShowIncorrectSquares] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    // Fetch grid data from API endpoint and update state
+    const fetchGrid = async (api) => {
+      try {
+        const response = await fetch(api);
+        const data = await response.json();
+
+        const updatedGridData = {
+          rows: data.rows.map((row) =>
+            row.map((square) => ({
+              ...square,
+              originalState: square.currentState,
+            }))
+          ),
+        };
+  
+        setGridData(updatedGridData); 
+      } catch (error) {
+        console.error('Error fetching grid data:', error);
+      }
+    };
+  
+    fetchGrid(api); 
+  }, [api]); // Runs only when 'api' state variable changes
+
+  // Fetch grid data based on grid size
+  const fetchGrid = (gridSize) => {
+    const api = gridSizes[gridSize];
+    fetch(api)
+      .then(response => response.json())
+      .then(json => {
+        setGridData(json);
+      }).catch(error => console.error(error));
+  }
+  
+  // Check game state for correctness and update grid and game message accordingly
+  const checkGameState = () => {
+    let allCorrect = true;
+    let allCurrentOrCorrect = true;
+    let newMessage = '';
+  
+    const updatedGridData = { ...gridData }; 
+  
+    updatedGridData.rows = updatedGridData.rows.map((row, i) => {
+      return row.map((square, j) => {
+        if (square.currentState !== square.correctState) {
+          allCorrect = false;
+        }
+        if (square.currentState !== square.correctState && square.currentState !== square.originalState) {
+          allCurrentOrCorrect = false;
+        }
+        return square;
+      });
+    });
+  
+    if (allCorrect) {
+      newMessage = 'You did it!!';
+    } else if (allCurrentOrCorrect) {
+      newMessage = 'So far so good';
+    } else {
+      newMessage = 'Something is wrong';
+    }
+  
+    setMessage(newMessage);
+    setGridData(updatedGridData); 
+    
+    const tdElements = document.getElementsByTagName('td');
+    for (let i = 0; i < tdElements.length; i++) {
+      const td = tdElements[i];
+      const row = parseInt(td.getAttribute('id').split('-')[1]);
+      const col = parseInt(td.getAttribute('id').split('-')[2]);
+      const square = gridData.rows[row][col];
+      if (showIncorrectSquares && square.currentState !== square.correctState && square.currentState !== square.originalState) {
+        td.style.border = '5px solid red';
+      } else {
+        td.style.border = '1px solid black';
+      }
+    }
+  };
+  
+  const handleGridSizeChange = (e) => {
+    const gridSize = e.target.value;
+    fetchGrid(gridSize);
+  }
+  
+  const handleShowIncorrectChange = (e) => {
+    setShowIncorrectSquares(e.target.checked);
+  }
+
+  const handleSquareClick = (rowIndex, colIndex, currentState) => {
+    const updatedGridData = { ...gridData };
+  
+    if (updatedGridData.rows[rowIndex][colIndex].canToggle) {
+      updatedGridData.rows[rowIndex][colIndex].currentState = (currentState + 1) % colors.length;
+      setGridData(updatedGridData);
+    }
+  };
+
+  const renderGrid = () => {
+    if (!gridData) {
+      return <div>Loading...</div>;
+    }
+ 
+    return (
+      <Grid
+      gridState={gridData.rows}
+      toggleSquare={handleSquareClick}
+      />
+    );
+  };
+
   return (
     <div>
-      X move count: {props.moveCountX} <br />
-      O move count: {props.moveCountO}
+      <h1>Three In A Row</h1>
+      <div>
+        <label htmlFor="gridSizeSelect">Select Grid Size:</label>
+        <select id="gridSizeSelect" onChange={handleGridSizeChange}>
+          {Object.keys(gridSizes).map((size, i) => (
+            <option key={i} value={size}>
+              {size}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label htmlFor="showIncorrectCheckbox">
+          Show Incorrect Squares:
+        </label>
+        <input
+          id="showIncorrectCheckbox"
+          type="checkbox"
+          checked={showIncorrectSquares}
+          onChange={handleShowIncorrectChange}
+        />
+      </div>
+      {renderGrid()}
+      <div>{message}</div>
+      <button onClick={checkGameState}>Check Puzzle</button>
     </div>
   );
-}
+};
 
-class Game extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = {
-      history: [
-        {
-          squares: Array(9).fill(null),
-          movePlayer: null,
-        },
-      ],
-      stepNumber: 0,
-      xIsNext: true,
-      moveCountX: 0,
-      moveCountO: 0,
-    };
-  }
-
-  handleClick(i) {
-    const history = this.state.history.slice(0, this.state.stepNumber + 1);
-    const current = history[history.length - 1];
-    const squares = current.squares.slice();
-    if (calculateWinner(squares) || squares[i]) {
-      return;
-    }
-    squares[i] = this.state.xIsNext ? "X" : "O";
-    const movePlayer = this.state.xIsNext ? "X" : "O";
-    this.setState({
-      history: history.concat([
-        {
-          squares: squares,
-          movePlayer: movePlayer,
-        },
-      ]),
-      stepNumber: history.length,
-      xIsNext: !this.state.xIsNext,
-      moveCountX: movePlayer === "X" ? this.state.moveCountX + 1 : this.state.moveCountX,
-      moveCountO: movePlayer === "O" ? this.state.moveCountO + 1 : this.state.moveCountO,
-    });
-  }
-
-  jumpTo(step) {
-    const history = this.state.history.slice(0, step + 1);
-    const current = history[history.length - 1];
-    const moveCountX = history.filter((step) => step.movePlayer === "X").length;
-    const moveCountO = history.filter((step) => step.movePlayer === "O").length;
-    this.setState({
-      stepNumber: step,
-      xIsNext: step % 2 === 0,
-      moveCountX: moveCountX,
-      moveCountO: moveCountO,
-    });
-  }
-
-  render() {
-    const history = this.state.history;
-    const current = history[this.state.stepNumber];
-    const winner = calculateWinner(current.squares);
-    const winningSquares = calculateWinningSquares(current.squares, winner);
-  
-    const moves = history.map((step, move) => {
-      const desc = move ? "Go to move #" + move : "Go to game start";
-      return (
-        <li key={move}>
-          <button onClick={() => this.jumpTo(move)}>{desc}</button>
-        </li>
-      );
-    });
-  
-    let status;
-    if (winner) {
-      status = "Winner: " + winner;
-    } else if (current.squares.every((square) => square !== null)) {
-      status = "Draw";
-    } else {
-      status = "Next player: " + (this.state.xIsNext ? "X" : "O");
-    }
-  
-    return (
-      <div className="game">
-        <div className="game-board">
-          <Board squares={current.squares} onClick={(i) => this.handleClick(i)} winningSquares={winningSquares}/>
-        </div>
-        <div className="game-info">
-          <div>{status}</div>
-          <MoveCounter moveCountX={this.state.moveCountX} moveCountO={this.state.moveCountO} />
-          <ol>{moves}</ol>
-        </div>
-      </div>
-    );
-  }  
-}
-
-function calculateWinner(squares) {
-    const lines = [
-      [0, 1, 2],
-      [3, 4, 5],
-      [6, 7, 8],
-      [0, 3, 6],
-      [1, 4, 7],
-      [2, 5, 8],
-      [0, 4, 8],
-      [2, 4, 6],
-    ];
-    for (let i = 0; i < lines.length; i++) {
-      const [a, b, c] = lines[i];
-      if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
-        return squares[a];
-      }
-    }
-    return null;
-}
-
-function calculateWinningSquares(squares, winner) {
-    const lines = [    [0, 1, 2],
-      [3, 4, 5],
-      [6, 7, 8],
-      [0, 3, 6],
-      [1, 4, 7],
-      [2, 5, 8],
-      [0, 4, 8],
-      [2, 4, 6],
-    ];
-    for (let i = 0; i < lines.length; i++) {
-      const [a, b, c] = lines[i];
-      if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c] && squares[a] === winner) {
-        return [a, b, c];
-      }
-    }
-}  
-
-export default Game
+export default Game;                
